@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>خطة المحتوى - السقيفة (نسخة محسّنة)</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        body { 
+            font-family: 'Tajawal', sans-serif; 
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        }
+        
+        ::-webkit-scrollbar { height: 10px; width: 10px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .syncing { animation: pulse 1.5s ease-in-out infinite; }
+        @keyframes slideIn { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .notification { animation: slideIn 0.3s ease-out; }
+
+        /* Drag & Drop Animations */
+        .dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+            cursor: grabbing !important;
+        }
+        
+        .drag-over {
+            background: rgba(59, 130, 246, 0.2) !important;
+            border: 2px dashed #3b82f6 !important;
+            transform: scale(1.05);
+        }
+
+        .column-dragging {
+            opacity: 0.7;
+            box-shadow: 0 10px 40px rgba(59, 130, 246, 0.4);
+        }
+
+        .column-drag-over {
+            background: rgba(59, 130, 246, 0.15) !important;
+            border-left: 3px solid #3b82f6 !important;
+            border-right: 3px solid #3b82f6 !important;
+        }
+
+        .grab-cursor {
+            cursor: grab;
+            transition: all 0.2s ease;
+        }
+
+        .grab-cursor:active {
+            cursor: grabbing;
+        }
+
+        .cell-animation {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .pop-in {
+            animation: popIn 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .slide-fade {
+            animation: slideFade 0.4s ease-out;
+        }
+
+        @keyframes slideFade {
+            from { 
+                transform: translateX(-20px); 
+                opacity: 0; 
+            }
+            to { 
+                transform: translateX(0); 
+                opacity: 1; 
+            }
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; }
+            .print-break-inside { break-inside: avoid; }
+            .print-container { width: 100% !important; max-width: none !important; padding: 0 !important; border: none !important; shadow: none !important; }
+        }
+
+        .glow { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+        .ping { animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
+        @keyframes ping { 75%, 100% { transform: scale(1.2); opacity: 0; } }
+
+        /* Column header drag indicator */
+        .column-header-draggable {
+            position: relative;
+        }
+
+        .column-header-draggable::before {
+            content: '⋮⋮';
+            position: absolute;
+            top: 50%;
+            right: 4px;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: rgba(148, 163, 184, 0.3);
+            letter-spacing: -2px;
+        }
+
+        .column-header-draggable:hover::before {
+            color: rgba(148, 163, 184, 0.7);
+        }
+
+        /* Logo Animation */
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .logo-container {
+            animation: logoFloat 3s ease-in-out infinite;
+        }
+
+        .logo-glow {
+            filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.3));
+        }
+    </style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyDdrMF82QBT45rVOTM-jvjnsy90mGOuuYo",
+        authDomain: "ramadan-schedule-4bd81.firebaseapp.com",
+        databaseURL: "https://ramadan-schedule-4bd81-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "ramadan-schedule-4bd81",
+        storageBucket: "ramadan-schedule-4bd81.firebasestorage.app",
+        messagingSenderId: "59360100485",
+        appId: "1:59360100485:web:35e8d6301299a7283de9ec",
+        measurementId: "G-P85H319WW8"
+    };
+
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    const database = firebase.database();
+
+    const Icons = {
+        Plus: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
+        Settings: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
+        Trash: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
+        X: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
+        Save: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>,
+        List: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>,
+        Grid: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>,
+        Print: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>,
+        Cloud: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>,
+        Users: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>,
+        Wifi: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>,
+        Move: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="5 9 2 12 5 15"></polyline><polyline points="9 5 12 2 15 5"></polyline><polyline points="15 19 12 22 9 19"></polyline><polyline points="19 9 22 12 19 15"></polyline><line x1="2" y1="12" x2="22" y2="12"></line><line x1="12" y1="2" x2="12" y2="22"></line></svg>,
+        Undo: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path></svg>
+    };
+
+    const ColorThemes = {
+        orange: { name: "برتقالي (تويتر)", css: "bg-orange-900/40 text-orange-200 border-orange-700" },
+        emerald: { name: "أخضر (سناب)", css: "bg-emerald-900/40 text-emerald-200 border-emerald-700" },
+        blue: { name: "أزرق (لينكد إن)", css: "bg-blue-900/40 text-blue-200 border-blue-700" },
+        yellow: { name: "ذهبي (ميداني)", css: "bg-yellow-900/40 text-yellow-200 border-yellow-700" },
+        purple: { name: "بنفسجي", css: "bg-purple-900/40 text-purple-200 border-purple-700" },
+        pink: { name: "وردي", css: "bg-pink-900/40 text-pink-200 border-pink-700" },
+        slate: { name: "رمادي", css: "bg-slate-700/40 text-slate-200 border-slate-600" },
+        red: { name: "أحمر", css: "bg-red-900/40 text-red-200 border-red-700" },
+    };
+
+    const MarketingSchedule = () => {
+        const daysCount = 30;
+        const daysArray = Array.from({ length: daysCount }, (_, i) => i + 1);
+        const [viewMode, setViewMode] = useState('grid');
+        const [syncStatus, setSyncStatus] = useState('connecting');
+        const [onlineUsers, setOnlineUsers] = useState(1);
+        const [notification, setNotification] = useState(null);
+        const isInitialLoad = useRef(true);
+        
+        // History for undo functionality
+        const [history, setHistory] = useState([]);
+        const [historyIndex, setHistoryIndex] = useState(-1);
+        
+        const defaultRows = [
+            { id: 1, label: "تويتر", code: "Tw", themeKey: "orange", days: Array(30).fill("") },
+            { id: 2, label: "سناب / تيك توك", code: "Sn", themeKey: "emerald", days: Array(30).fill("") },
+            { id: 3, label: "لينكد إن", code: "In", themeKey: "blue", days: Array(30).fill("") },
+            { id: 4, label: "ميداني", code: "Of", themeKey: "yellow", days: Array(30).fill("") },
+        ];
+
+        const [rows, setRows] = useState(defaultRows);
+        const [editingCell, setEditingCell] = useState(null);
+        const [editingRow, setEditingRow] = useState(null);
+        const [draggedCell, setDraggedCell] = useState(null);
+        const [draggedColumn, setDraggedColumn] = useState(null);
+        const [columnOrder, setColumnOrder] = useState(daysArray);
+
+        const showNotification = (message, type = 'info') => {
+            setNotification({ message, type });
+            setTimeout(() => setNotification(null), 3000);
+        };
+
+        // Add to history
+        const addToHistory = (newRows) => {
+            const newHistory = history.slice(0, historyIndex + 1);
+            newHistory.push(JSON.parse(JSON.stringify(newRows)));
+            if (newHistory.length > 50) newHistory.shift(); // Keep last 50 states
+            setHistory(newHistory);
+            setHistoryIndex(newHistory.length - 1);
+        };
+
+        // Undo function
+        const undo = () => {
+            if (historyIndex > 0) {
+                const newIndex = historyIndex - 1;
+                setHistoryIndex(newIndex);
+                const previousState = JSON.parse(JSON.stringify(history[newIndex]));
+                setRows(previousState);
+                saveToFirebase(previousState);
+                showNotification('تم التراجع عن آخر تعديل', 'info');
+            }
+        };
+
+        // Keyboard shortcut for undo
+        useEffect(() => {
+            const handleKeyDown = (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                    e.preventDefault();
+                    undo();
+                }
+            };
+            window.addEventListener('keydown', handleKeyDown);
+            return () => window.removeEventListener('keydown', handleKeyDown);
+        }, [historyIndex, history]);
+
+        useEffect(() => {
+            const scheduleRef = database.ref('schedules/ramadan-2025');
+            const presenceRef = database.ref('.info/connected');
+            const usersRef = database.ref('schedules/ramadan-2025/online');
+            
+            let sessionId = sessionStorage.getItem('sqfa_session_id');
+            if (!sessionId) {
+                sessionId = 'user_' + Math.random().toString(36).substr(2, 9);
+                sessionStorage.setItem('sqfa_session_id', sessionId);
+            }
+            const myConnectionRef = usersRef.child(sessionId);
+
+            scheduleRef.child('data').once('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    setRows(data);
+                    addToHistory(data);
+                } else {
+                    scheduleRef.child('data').set(defaultRows);
+                    addToHistory(defaultRows);
+                }
+                isInitialLoad.current = false;
+                setSyncStatus('synced');
+            });
+
+            scheduleRef.child('data').on('value', (snapshot) => {
+                if (!isInitialLoad.current) {
+                    const data = snapshot.val();
+                    if (data) {
+                        setRows(data);
+                        showNotification('تم تحديث البيانات من مستخدم آخر', 'success');
+                    }
+                }
+            });
+
+            presenceRef.on('value', (snap) => {
+                if (snap.val()) {
+                    myConnectionRef.onDisconnect().remove();
+                    myConnectionRef.set(true);
+                }
+            });
+
+            usersRef.on('value', (snapshot) => {
+                setOnlineUsers(snapshot.numChildren());
+            });
+
+            return () => {
+                scheduleRef.off();
+                presenceRef.off();
+                usersRef.off();
+                myConnectionRef.remove();
+            };
+        }, []);
+
+        const saveToFirebase = (newData) => {
+            setSyncStatus('syncing');
+            database.ref('schedules/ramadan-2025/data').set(newData)
+                .then(() => setSyncStatus('synced'))
+                .catch((error) => {
+                    setSyncStatus('error');
+                    showNotification('فشل الحفظ - تحقق من الاتصال', 'error');
+                });
+        };
+
+        const saveCellContent = (newContent) => {
+            const newRows = rows.map(row => {
+                if (row.id === editingCell.rowId) {
+                    const newDays = [...row.days];
+                    newDays[editingCell.dayIndex] = newContent;
+                    return { ...row, days: newDays };
+                }
+                return row;
+            });
+            setRows(newRows);
+            addToHistory(newRows);
+            saveToFirebase(newRows);
+            setEditingCell(null);
+        };
+
+        const saveRowSettings = (rowId, newLabel, newCode, newThemeKey) => {
+            const newRows = rows.map(row => {
+                if (row.id === rowId) {
+                    return { ...row, label: newLabel, code: newCode, themeKey: newThemeKey };
+                }
+                return row;
+            });
+            setRows(newRows);
+            addToHistory(newRows);
+            saveToFirebase(newRows);
+            setEditingRow(null);
+        };
+
+        const addRow = () => {
+            const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
+            const newRows = [...rows, {
+                id: newId, label: "منصة جديدة", code: "N", themeKey: "slate", days: Array(daysCount).fill("")
+            }];
+            setRows(newRows);
+            addToHistory(newRows);
+            saveToFirebase(newRows);
+        };
+
+        const deleteRow = (id) => {
+            if(confirm("حذف هذا الصف نهائياً؟")) {
+                const newRows = rows.filter(r => r.id !== id);
+                setRows(newRows);
+                addToHistory(newRows);
+                saveToFirebase(newRows);
+            }
+        };
+
+        // Cell Drag & Drop Handlers
+        const handleCellDragStart = (e, rowId, dayIndex) => {
+            setDraggedCell({ rowId, dayIndex });
+            e.currentTarget.classList.add('dragging');
+        };
+
+        const handleCellDragEnd = (e) => {
+            e.currentTarget.classList.remove('dragging');
+            setDraggedCell(null);
+        };
+
+        const handleCellDragOver = (e) => {
+            e.preventDefault();
+            e.currentTarget.classList.add('drag-over');
+        };
+
+        const handleCellDragLeave = (e) => {
+            e.currentTarget.classList.remove('drag-over');
+        };
+
+        const handleCellDrop = (e, targetRowId, targetDayIndex) => {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drag-over');
+            
+            if (!draggedCell) return;
+            
+            const newRows = rows.map(row => {
+                const newDays = [...row.days];
+                
+                if (row.id === draggedCell.rowId && row.id === targetRowId) {
+                    // Same row - swap
+                    [newDays[draggedCell.dayIndex], newDays[targetDayIndex]] = 
+                    [newDays[targetDayIndex], newDays[draggedCell.dayIndex]];
+                } else if (row.id === draggedCell.rowId) {
+                    // Source row - clear
+                    const temp = newDays[draggedCell.dayIndex];
+                    newDays[draggedCell.dayIndex] = "";
+                    return { ...row, days: newDays, _draggedContent: temp };
+                } else if (row.id === targetRowId) {
+                    // Target row - set from temp
+                    const sourceRow = rows.find(r => r.id === draggedCell.rowId);
+                    newDays[targetDayIndex] = sourceRow.days[draggedCell.dayIndex];
+                }
+                
+                return { ...row, days: newDays };
+            });
+            
+            setRows(newRows);
+            addToHistory(newRows);
+            saveToFirebase(newRows);
+            showNotification('تم نقل المحتوى بنجاح', 'success');
+            setDraggedCell(null);
+        };
+
+        // Column Drag & Drop Handlers
+        const handleColumnDragStart = (e, dayIndex) => {
+            setDraggedColumn(dayIndex);
+            e.currentTarget.classList.add('column-dragging');
+        };
+
+        const handleColumnDragEnd = (e) => {
+            e.currentTarget.classList.remove('column-dragging');
+            setDraggedColumn(null);
+        };
+
+        const handleColumnDragOver = (e) => {
+            e.preventDefault();
+            const th = e.currentTarget;
+            th.classList.add('column-drag-over');
+        };
+
+        const handleColumnDragLeave = (e) => {
+            e.currentTarget.classList.remove('column-drag-over');
+        };
+
+        const handleColumnDrop = (e, targetDayIndex) => {
+            e.preventDefault();
+            e.currentTarget.classList.remove('column-drag-over');
+            
+            if (draggedColumn === null || draggedColumn === targetDayIndex) return;
+            
+            const newRows = rows.map(row => {
+                const newDays = [...row.days];
+                [newDays[draggedColumn], newDays[targetDayIndex]] = 
+                [newDays[targetDayIndex], newDays[draggedColumn]];
+                return { ...row, days: newDays };
+            });
+            
+            setRows(newRows);
+            addToHistory(newRows);
+            saveToFirebase(newRows);
+            showNotification(`تم نقل عمود اليوم ${draggedColumn + 1} إلى اليوم ${targetDayIndex + 1}`, 'success');
+            setDraggedColumn(null);
+        };
+
+        const getTheme = (key) => ColorThemes[key] || ColorThemes.slate;
+
+        return (
+            <div className="min-h-screen p-2 md:p-6 print-container">
+                {notification && (
+                    <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-lg shadow-2xl notification no-print ${
+                        notification.type === 'success' ? 'bg-emerald-600' :
+                        notification.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+                    } text-white font-bold flex items-center gap-2`}>
+                        <Icons.Wifi />
+                        {notification.message}
+                    </div>
+                )}
+
+                <div className="max-w-[100%] mx-auto bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
+                    
+                    <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-slate-900 text-white p-4 md:p-6 flex flex-col md:flex-row justify-between items-center gap-4 no-print border-b border-slate-700">
+                        <div className="flex items-center gap-4">
+                            <div>
+                                <h1 className="text-2xl font-bold text-blue-400 flex items-center gap-3">
+                                    جدول رمضان 1447
+                                    <span className="relative flex items-center gap-2">
+                                        <span className={`text-xs px-3 py-1 rounded-full flex items-center gap-1.5 ${
+                                            syncStatus === 'synced' ? 'bg-emerald-500/20 text-emerald-300' :
+                                            syncStatus === 'syncing' ? 'bg-yellow-500/20 text-yellow-300 syncing' :
+                                            syncStatus === 'connecting' ? 'bg-blue-500/20 text-blue-300 syncing' :
+                                            'bg-red-500/20 text-red-300'
+                                        }`}>
+                                            <Icons.Cloud />
+                                            {syncStatus === 'synced' ? 'متزامن' : 
+                                             syncStatus === 'syncing' ? 'جاري الحفظ' : 
+                                             syncStatus === 'connecting' ? 'جاري الاتصال' : 'غير متصل'}
+                                        </span>
+                                        {syncStatus === 'synced' && (
+                                            <span className="absolute top-0 left-0 w-full h-full bg-emerald-400 rounded-full ping opacity-75"></span>
+                                        )}
+                                    </span>
+                                </h1>
+                                <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                                    <Icons.Users />
+                                    {onlineUsers} مستخدم متصل الآن • مشاركة حية
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 items-center bg-slate-800 p-1.5 rounded-lg border border-slate-700">
+                            <button 
+                                onClick={undo} 
+                                disabled={historyIndex <= 0}
+                                className={`px-3 py-2 rounded text-sm flex gap-2 transition-all ${
+                                    historyIndex <= 0 
+                                        ? 'text-slate-600 cursor-not-allowed' 
+                                        : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                                }`}
+                                title="تراجع (Ctrl+Z)"
+                            >
+                                <Icons.Undo /> تراجع
+                            </button>
+                            <div className="w-px h-6 bg-slate-600"></div>
+                            <button onClick={() => setViewMode('grid')} className={`px-3 py-2 rounded text-sm flex gap-2 transition-all ${viewMode === 'grid' ? 'bg-blue-600 shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                                <Icons.Grid /> الشبكة
+                            </button>
+                            <button onClick={() => setViewMode('list')} className={`px-3 py-2 rounded text-sm flex gap-2 transition-all ${viewMode === 'list' ? 'bg-blue-600 shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                                <Icons.List /> القائمة
+                            </button>
+                            <div className="w-px h-6 bg-slate-600 mx-1"></div>
+                            <button onClick={() => window.print()} className="px-3 py-2 rounded hover:bg-slate-700 text-slate-300" title="طباعة">
+                                <Icons.Print />
+                            </button>
+                            <button onClick={addRow} className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white flex gap-2 font-bold text-sm shadow-lg">
+                                <Icons.Plus /> إضافة منصة
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="hidden print:block p-8 border-b text-center bg-white">
+                        <h1 className="text-3xl font-bold mb-2 text-slate-900">جدول الخطة التسويقية - رمضان 1447</h1>
+                    </div>
+
+                    <div className="bg-slate-900 min-h-[600px] print:bg-white">
+                        {viewMode === 'grid' && (
+                            <div className="overflow-x-auto pb-6 custom-scrollbar">
+                                <table className="w-full text-center border-collapse min-w-[1600px]">
+                                    <thead>
+                                        <tr className="bg-slate-800 text-slate-300 border-b border-slate-700">
+                                            <th className="p-4 text-right min-w-[220px] sticky right-0 bg-slate-800 z-20 font-bold border-l border-slate-700 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)]">
+                                                المنصة / الإعدادات
+                                            </th>
+                                            {daysArray.map((day, dayIndex) => (
+                                                <th 
+                                                    key={day} 
+                                                    draggable="true"
+                                                    onDragStart={(e) => handleColumnDragStart(e, dayIndex)}
+                                                    onDragEnd={handleColumnDragEnd}
+                                                    onDragOver={handleColumnDragOver}
+                                                    onDragLeave={handleColumnDragLeave}
+                                                    onDrop={(e) => handleColumnDrop(e, dayIndex)}
+                                                    className="p-2 border-l border-slate-700 min-w-[48px] text-xs font-bold text-slate-400 grab-cursor column-header-draggable no-print relative"
+                                                    title="اسحب لنقل العمود"
+                                                >
+                                                    {day}
+                                                </th>
+                                            ))}
+                                            <th className="no-print p-2 min-w-[50px]"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rows.map((row) => {
+                                            const theme = getTheme(row.themeKey);
+                                            return (
+                                                <tr key={row.id} className="hover:bg-slate-800/50 transition-colors group slide-fade">
+                                                    <td className="p-2 text-right sticky right-0 bg-slate-900 group-hover:bg-slate-800/50 z-10 border-l border-slate-700 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)]">
+                                                        <div className="flex items-center justify-between gap-2 pl-2">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`w-9 h-9 flex items-center justify-center rounded-lg ${theme.css} font-bold text-xs shadow-lg border`}>{row.code}</div>
+                                                                <span className="font-bold text-slate-300 text-sm truncate max-w-[120px]">{row.label}</span>
+                                                            </div>
+                                                            <button onClick={() => setEditingRow(row)} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-all no-print"><Icons.Settings /></button>
+                                                        </div>
+                                                    </td>
+                                                    {row.days.map((content, dayIndex) => {
+                                                        const hasContent = content && content.trim() !== "";
+                                                        return (
+                                                            <td key={dayIndex} className="border-l border-slate-700 p-1 h-14">
+                                                                <div 
+                                                                    draggable={hasContent}
+                                                                    onDragStart={(e) => hasContent && handleCellDragStart(e, row.id, dayIndex)}
+                                                                    onDragEnd={handleCellDragEnd}
+                                                                    onDragOver={handleCellDragOver}
+                                                                    onDragLeave={handleCellDragLeave}
+                                                                    onDrop={(e) => handleCellDrop(e, row.id, dayIndex)}
+                                                                    onClick={() => setEditingCell({ rowId: row.id, dayIndex, content, rowLabel: row.label, dayNumber: dayIndex + 1, theme })}
+                                                                    className={`w-full h-full rounded flex items-center justify-center text-[10px] p-1 cell-animation ${
+                                                                        hasContent 
+                                                                            ? `${theme.css} shadow-lg font-bold border hover:scale-105 hover:shadow-xl cursor-move` 
+                                                                            : 'hover:bg-slate-700 text-transparent hover:text-slate-500 cursor-pointer'
+                                                                    }`}
+                                                                    title={hasContent ? "اسحب لنقل المحتوى" : "انقر للإضافة"}
+                                                                >
+                                                                    {hasContent ? (content.length > 8 ? '..' : content) : '+'}
+                                                                </div>
+                                                            </td>
+                                                        );
+                                                    })}
+                                                    <td className="p-2 border-l border-slate-700 no-print">
+                                                        <button onClick={() => deleteRow(row.id)} className="text-red-400/50 hover:text-red-400 p-1.5 rounded hover:bg-red-500/10"><Icons.Trash /></button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {viewMode === 'list' && (
+                            <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {daysArray.map(day => {
+                                    const dayContent = rows.filter(r => r.days[day - 1] && r.days[day - 1].trim() !== "");
+                                    if (dayContent.length === 0) return null;
+                                    return (
+                                        <div key={day} className="bg-slate-800 rounded-xl shadow-lg border border-slate-700 overflow-hidden print-break-inside hover:border-blue-600/50 transition-all pop-in">
+                                            <div className="bg-slate-700 border-b border-slate-600 p-3 font-bold text-slate-200 flex justify-between">
+                                                <span>يوم {day} رمضان</span>
+                                                <span className="text-xs font-normal bg-slate-600 px-2 py-0.5 rounded-full text-slate-300">{dayContent.length}</span>
+                                            </div>
+                                            <div className="p-3 space-y-2">
+                                                {dayContent.map(r => (
+                                                    <div key={r.id} className={`p-2 rounded text-sm ${getTheme(r.themeKey).css} border shadow-md`}>
+                                                        <div className="font-bold text-xs opacity-70 mb-1">{r.label}</div>
+                                                        <div>{r.days[day - 1]}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {editingCell && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay no-print">
+                            <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md border border-slate-700 glow pop-in">
+                                <div className={`p-4 rounded-t-xl flex justify-between items-center border-b border-slate-700 ${editingCell.theme.css}`}>
+                                    <h3 className="font-bold">محتوى: {editingCell.rowLabel} (يوم {editingCell.dayNumber})</h3>
+                                    <button onClick={() => setEditingCell(null)} className="hover:bg-slate-700/50 rounded p-1"><Icons.X /></button>
+                                </div>
+                                <div className="p-5">
+                                    <textarea autoFocus id="cellInput" defaultValue={editingCell.content} className="w-full p-3 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[120px] bg-slate-900 text-slate-200" placeholder="اكتب هنا..."></textarea>
+                                    <div className="mt-4 flex gap-2">
+                                        <button onClick={() => saveCellContent(document.getElementById('cellInput').value)} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 flex justify-center gap-2 shadow-lg"><Icons.Save /> حفظ</button>
+                                        <button onClick={() => saveCellContent("")} className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg border border-red-500/30 hover:bg-red-500/30"><Icons.Trash /></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {editingRow && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay no-print">
+                            <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-sm border border-slate-700 glow pop-in">
+                                <div className="p-4 border-b border-slate-700 flex justify-between items-center">
+                                    <h3 className="font-bold text-lg text-slate-200">إعدادات المنصة</h3>
+                                    <button onClick={() => setEditingRow(null)} className="text-slate-400 hover:text-slate-200"><Icons.X /></button>
+                                </div>
+                                <div className="p-5 space-y-4">
+                                    <input type="text" id="rowLabelInput" defaultValue={editingRow.label} className="w-full p-2 border border-slate-600 rounded bg-slate-900 text-slate-200" />
+                                    <input type="text" id="rowCodeInput" defaultValue={editingRow.code} maxLength="2" className="w-full p-2 border border-slate-600 rounded uppercase bg-slate-900 text-slate-200" />
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {Object.keys(ColorThemes).map(key => (
+                                            <button key={key} onClick={() => {
+                                                const label = document.getElementById('rowLabelInput').value;
+                                                const code = document.getElementById('rowCodeInput').value;
+                                                saveRowSettings(editingRow.id, label, code, key);
+                                            }} className={`h-10 rounded-lg border-2 ${ColorThemes[key].css.split(' ')[0]} ${editingRow.themeKey === key ? 'border-blue-400 scale-110 shadow-lg' : 'border-transparent'}`}></button>
+                                        ))}
+                                    </div>
+                                    <button onClick={() => {
+                                        const label = document.getElementById('rowLabelInput').value;
+                                        const code = document.getElementById('rowCodeInput').value;
+                                        saveRowSettings(editingRow.id, label, code, editingRow.themeKey);
+                                    }} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow-lg">حفظ التغييرات</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Logo Section */}
+                <div className="mt-8 flex justify-center items-center no-print">
+                    <div className="logo-container bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-blue-500/30 rounded-2xl p-8 shadow-2xl hover:shadow-blue-500/20 transition-all duration-300">
+                        <div className="text-center space-y-3">
+                            <div className="logo-glow">
+                                <svg width="120" height="120" viewBox="0 0 200 200" className="mx-auto">
+                                    {/* Modern Building/Saqifa Icon */}
+                                    <defs>
+                                        <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
+                                            <stop offset="100%" style={{stopColor: '#8b5cf6', stopOpacity: 1}} />
+                                        </linearGradient>
+                                    </defs>
+                                    
+                                    {/* Base structure */}
+                                    <rect x="50" y="120" width="100" height="60" fill="url(#logoGradient)" rx="8"/>
+                                    
+                                    {/* Roof/Top */}
+                                    <path d="M 40 120 L 100 80 L 160 120 Z" fill="url(#logoGradient)" opacity="0.9"/>
+                                    
+                                    {/* Windows */}
+                                    <rect x="70" y="135" width="20" height="20" fill="#1e293b" rx="3"/>
+                                    <rect x="110" y="135" width="20" height="20" fill="#1e293b" rx="3"/>
+                                    <rect x="70" y="160" width="20" height="15" fill="#1e293b" rx="3"/>
+                                    <rect x="110" y="160" width="20" height="15" fill="#1e293b" rx="3"/>
+                                    
+                                    {/* Door */}
+                                    <rect x="90" y="150" width="20" height="30" fill="#1e293b" rx="4"/>
+                                    
+                                    {/* Decorative elements */}
+                                    <circle cx="100" cy="90" r="8" fill="#fbbf24" opacity="0.8"/>
+                                    <path d="M 100 50 L 105 70 L 95 70 Z" fill="#fbbf24" opacity="0.8"/>
+                                </svg>
+                            </div>
+                            
+                            <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-blue-400 bg-clip-text text-transparent animate-pulse">
+                                السقيفة
+                            </h2>
+                            
+                            <p className="text-slate-400 text-sm max-w-md mx-auto leading-relaxed">
+                                منصة إدارة المحتوى التسويقي المتقدمة
+                            </p>
+                            
+                            <div className="flex items-center justify-center gap-2 text-xs text-slate-500 pt-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                <span>نظام سحابي متزامن في الوقت الفعلي</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<MarketingSchedule />);
+</script>
+
+</body>
+</html>
